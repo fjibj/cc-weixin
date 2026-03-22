@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "weixin": {
-      "command": "bun",
-      "args": ["run", "--cwd", "${CLAUDE_PLUGIN_ROOT}", "--silent", "start"]
+      "command": "bash",
+      "args": ["-c", "cd \"${CLAUDE_PLUGIN_ROOT:-.}\" && exec bun server.ts"]
     }
   }
 }
