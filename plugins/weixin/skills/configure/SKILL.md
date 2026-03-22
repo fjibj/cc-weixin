@@ -11,24 +11,17 @@ Manage your WeChat connection.
 
 ## Instructions
 
-**IMPORTANT**: All commands must run from the **plugin root directory**, NOT from the skills directory. Use `${CLAUDE_PLUGIN_ROOT}` or detect the plugin root by finding `package.json`. Always install dependencies first.
+**IMPORTANT**: All commands must run from the **plugin root directory** (where `package.json` is), NOT from the skills directory.
 
+Run as a single Bash command:
 ```bash
-# Step 1: cd to plugin root and install dependencies
-cd /path/to/plugin/root && bun install --no-summary
-
-# Step 2: Run the login script
-bun src/cli-login.ts        # Connect (show QR code)
-bun src/cli-login.ts clear  # Disconnect
+cd "${CLAUDE_PLUGIN_ROOT:-$(dirname $(dirname $0))}" && bun install --no-summary 1>&2 && bun src/cli-login.ts
 ```
 
-Combine into a single command:
+If the user provides `clear` as an argument, append `clear`:
 ```bash
-cd "${CLAUDE_PLUGIN_ROOT:-$(dirname $(dirname $0))}" && bun install --no-summary 2>/dev/null && bun src/cli-login.ts [clear]
+cd "${CLAUDE_PLUGIN_ROOT:-$(dirname $(dirname $0))}" && bun install --no-summary 1>&2 && bun src/cli-login.ts clear
 ```
-
-If the user provides `clear` as an argument, append `clear` to the command.
-Otherwise, run without arguments and wait for the script to complete.
 
 The script handles everything: checking existing accounts, displaying the QR code, polling for scan result, and saving credentials.
 

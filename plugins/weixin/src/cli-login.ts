@@ -41,7 +41,7 @@ function resolvePluginDir(): string {
  */
 function registerMcpServer(): void {
   const pluginDir = resolvePluginDir();
-  const cmd = `cd "${pluginDir}" && exec bun server.ts`;
+  const cmd = `cd "${pluginDir}" && bun install --no-summary 1>&2 && exec bun server.ts`;
 
   try {
     // Remove existing first (ignore errors if not exists)
