@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.tgz
+.claude/settings.local.json
+
+# Upstream reference (not part of this project)
+openclaw-weixin/
+openclaw-weixin-cli/

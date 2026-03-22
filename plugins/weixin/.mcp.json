@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "weixin": {
+      "command": "bun",
+      "args": ["server.ts"]
+    }
+  }
+}

@@ -1,0 +1,117 @@
+# Claude Code 微信 Channel 插件
+
+通过微信官方 iLink Bot API 将微信连接到 Claude Code。
+
+## 特性
+
+- **官方 API**：使用微信 iLink Bot API，非逆向工程
+- **完整媒体支持**：收发图片、视频、语音消息和文件
+- **访问控制**：配对码 + 白名单，防止未授权访问
+- **本地安全**：MCP Server 通过 stdio 本地运行，无暴露端口
+
+## 前置要求
+
+- [Bun](https://bun.sh) 运行时
+- [Claude Code](https://claude.ai/code)（需支持 channel 功能）
+- 微信账号
+
+## 安装
+
+在 Claude Code 中添加市场并安装插件：
+
+```
+/plugin marketplace add qufei1993/cc-weixin
+/plugin install weixin@cc-weixin
+```
+
+或从本地目录安装（开发用）：
+
+```bash
+git clone https://github.com/qufei1993/cc-weixin.git
+cd cc-weixin
+```
+
+在 Claude Code 中，将当前目录添加为本地 marketplace 并安装插件：
+
+```
+/plugin marketplace add /path/to/cc-weixin
+/plugin install weixin@cc-weixin
+```
+
+## 配置
+
+### 1. 连接微信账号
+
+```
+/weixin:configure
+```
+
+用微信扫描终端中显示的二维码。
+
+### 2. 启动 Claude Code 并启用微信 channel
+
+```bash
+# 通过已安装插件启动
+claude --channels plugin:weixin@cc-weixin
+
+# 或本地开发模式
+claude --dangerously-load-development-channels server:weixin
+```
+
+### 3. 配对微信用户
+
+首次从微信发送消息时，会收到一个 6 位配对码。在 Claude Code 中确认：
+
+```
+/weixin:access pair 123456
+```
+
+### 4. 锁定访问（推荐）
+
+```
+/weixin:access policy allowlist
+```
+
+这将阻止新用户获取配对码。详见 [ACCESS.md](plugins/weixin/ACCESS.md)。
+
+## 使用
+
+连接后，从微信发送的消息将出现在 Claude Code 中。Claude 的回复会发送回微信。
+
+### 支持的消息类型
+
+| 方向 | 文本 | 图片 | 视频 | 文件 | 语音 |
+|------|------|------|------|------|------|
+| 接收 | ✓    | ✓    | ✓    | ✓    | ✓    |
+| 发送 | ✓    | ✓    | ✓    | ✓    | —    |
+
+### Skills 命令
+
+| 命令 | 说明 |
+|------|------|
+| `/weixin:configure` | 连接微信账号（扫码登录） |
+| `/weixin:configure clear` | 断开微信账号 |
+| `/weixin:access` | 管理访问控制 |
+
+## 架构
+
+```
+微信用户 ──DM──→ 微信服务器 (ilinkai.weixin.qq.com)
+                       ↑ 长轮询 getUpdates
+                 MCP Server (server.ts)
+                       ↓ notifications/claude/channel
+                  Claude Code Session (stdio)
+```
+
+## 安全设计
+
+- 使用微信官方 iLink Bot API（非逆向工程）
+- 凭证文件 `chmod 0600` 保护
+- 默认启用配对码访问控制
+- Context Token 严格按会话回传
+- 每次上传随机生成 AES 密钥
+- 通过 stdio 本地运行，无网络端口暴露
+
+## 许可证
+
+MIT
