@@ -1,113 +1,116 @@
 # cc-weixin
 
-English | [中文](README.zh-CN.md)
+> **C**ode **C**hannel — **W**ei**x**in（微信）
 
-> **C**ode **C**hannel — **W**ei**x**in (WeChat)
+通过微信官方 iLink Bot API，将微信连接到 AI 编程工具。当前支持 Claude Code，后续计划支持 Codex 等更多平台。
 
-Connect WeChat to AI coding tools via the official iLink Bot API. Currently supports Claude Code, with plans to support Codex and more.
+<p align="center">
+  <img src="docs/assets/wechat-chat.png" width="300" alt="微信聊天" />
+  <img src="docs/assets/claude-code-terminal.png" width="500" alt="Claude Code 终端" />
+</p>
 
-## Features
+## 特性
 
-- **Official API**: Uses WeChat iLink Bot API, no reverse engineering
-- **Full media support**: Send and receive images, videos, voice messages, and files
-- **Access control**: Pairing code + allowlist to prevent unauthorized access
-- **Local security**: MCP Server runs locally via stdio, no exposed ports
-- **Platform decoupled**: WeChat communication layer separated from platform adapter, extensible to more AI tools
+- **官方 API**：使用微信 iLink Bot API，非逆向工程
+- **完整媒体支持**：收发图片、视频、语音消息和文件
+- **访问控制**：配对码 + 白名单，防止未授权访问
+- **本地安全**：MCP Server 通过 stdio 本地运行，无暴露端口
+- **平台解耦**：微信通信层与平台适配层分离，便于扩展到更多 AI 编程工具
 
-## Supported Platforms
+## 支持平台
 
-| Platform | Status |
-|----------|--------|
-| Claude Code | ✅ Supported |
-| Codex (OpenAI) | 🔜 Planned |
+| 平台 | 状态 |
+|------|------|
+| Claude Code | ✅ 已支持 |
+| Codex (OpenAI) | 🔜 计划中 |
 
-## Prerequisites
+## 前置要求
 
-- [Bun](https://bun.sh) runtime
-- [Claude Code](https://claude.ai/code) (with channel support)
-- WeChat account
+- [Bun](https://bun.sh) 运行时
+- [Claude Code](https://claude.ai/code)（需支持 channel 功能）
+- 微信账号
 
-## Installation
+## 安装
 
-Add the marketplace and install the plugin in Claude Code:
+在 Claude Code 中添加市场并安装插件：
 
 ```
 /plugin marketplace add qufei1993/cc-weixin
 /plugin install weixin@cc-weixin
 ```
 
-Or install from local directory (for development):
+或从本地目录安装（开发用）：
 
 ```bash
 git clone https://github.com/qufei1993/cc-weixin.git
 cd cc-weixin
 ```
 
-In Claude Code, add the local directory as a marketplace and install:
+在 Claude Code 中，将当前目录添加为本地 marketplace 并安装插件：
 
 ```
 /plugin marketplace add /path/to/cc-weixin
 /plugin install weixin@cc-weixin
 ```
 
-Restart Claude Code after installation.
+安装之后需要重启 Claude Code
 
-## Configuration
+## 配置
 
-### 1. Connect WeChat Account
+### 1. 连接微信账号
 
 ```
 /weixin:configure
 ```
 
-Scan the QR code displayed in the terminal with WeChat.
+用微信扫描终端中显示的二维码。
 
-### 2. Start Claude Code with WeChat Channel
+### 2. 启动 Claude Code 并启用微信 channel
 
-After `/weixin:configure` succeeds, the global MCP server is auto-registered. Start from any directory:
+`/weixin:configure` 连接成功后会自动注册全局 MCP 服务器，之后在任意目录启动：
 
 ```bash
 claude --dangerously-load-development-channels server:weixin
 ```
 
-> **Note**: `--channels plugin:weixin@cc-weixin` requires official allowlist approval (not yet available). Use the command above instead.
+> **注意**：`--channels plugin:weixin@cc-weixin` 需要官方 allowlist 批准，目前尚未开放，请使用上述方式启动。
 
-### 3. Pair WeChat User
+### 3. 配对微信用户
 
-When sending a message from WeChat for the first time, you'll receive a 6-digit pairing code. Confirm in Claude Code:
+首次从微信发送消息时，会收到一个 6 位配对码。在 Claude Code 中确认：
 
 ```
 /weixin:access pair 123456
 ```
 
-### 4. Lock Access (Recommended)
+### 4. 锁定访问（推荐）
 
 ```
 /weixin:access policy allowlist
 ```
 
-This blocks new users from obtaining pairing codes. See [ACCESS.md](plugins/weixin/ACCESS.md).
+这将阻止新用户获取配对码。详见 [ACCESS.md](plugins/weixin/ACCESS.md)。
 
-## Usage
+## 使用
 
-Once connected, messages from WeChat appear in Claude Code. Claude's replies are sent back to WeChat.
+连接后，从微信发送的消息将出现在 Claude Code 中。Claude 的回复会发送回微信。
 
-### Supported Message Types
+### 支持的消息类型
 
-| Direction | Text | Image | Video | File | Voice |
-|-----------|------|-------|-------|------|-------|
-| Receive   | ✓    | ✓     | —     | ✓    | ✓     |
-| Send      | ✓    | ✓     | —     | ✓    | ✓     |
+| 方向 | 文本 | 图片 | 视频 | 文件 | 语音 |
+|------|------|------|------|------|------|
+| 接收 | ✓    | ✓    | —    | ✓    | ✓    |
+| 发送 | ✓    | ✓    | —    | ✓    | ✓    |
 
-### Skills Commands
+### Skills 命令
 
-| Command | Description |
-|---------|-------------|
-| `/weixin:configure` | Connect WeChat account (QR login) |
-| `/weixin:configure clear` | Disconnect WeChat account |
-| `/weixin:access` | Manage access control |
+| 命令 | 说明 |
+|------|------|
+| `/weixin:configure` | 连接微信账号（扫码登录） |
+| `/weixin:configure clear` | 断开微信账号 |
+| `/weixin:access` | 管理访问控制 |
 
-## Uninstall
+## 卸载
 
 ```
 /weixin:configure clear
@@ -115,38 +118,34 @@ Once connected, messages from WeChat appear in Claude Code. Claude's replies are
 /plugin marketplace remove cc-weixin
 ```
 
-Clean up global MCP registration and cache:
+清理全局 MCP 注册和缓存：
 
 ```bash
 claude mcp remove weixin --scope user
 rm -rf ~/.claude/plugins/cache/cc-weixin
 ```
 
-## Architecture
+## 架构
 
 ```
-WeChat User ──DM──→ WeChat Server (ilinkai.weixin.qq.com)
-                          ↑ Long-poll getUpdates
-                 Communication Layer (src/)     ← Platform-agnostic, reusable
-                          ↓ onMessage callback
-                 Platform Adapter (server.ts)   ← Claude Code / Codex / ...
-                          ↓ notifications/channel
-                 AI Coding Tool Session (stdio)
+微信用户 ──DM──→ 微信服务器 (ilinkai.weixin.qq.com)
+                       ↑ 长轮询 getUpdates
+              微信通信层 (src/)          ← 平台无关，可复用
+                       ↓ onMessage 回调
+              平台适配层 (server.ts)     ← Claude Code / Codex / ...
+                       ↓ notifications/channel
+              AI 编程工具 Session (stdio)
 ```
 
-## Security
+## 安全设计
 
-- Uses official WeChat iLink Bot API (no reverse engineering)
-- Credential files protected with `chmod 0600`
-- Pairing code access control enabled by default
-- Context Token strictly bound to user sessions
-- Random AES key generated per upload
-- Runs locally via stdio, no network ports exposed
+- 使用微信官方 iLink Bot API（非逆向工程）
+- 凭证文件 `chmod 0600` 保护
+- 默认启用配对码访问控制
+- Context Token 严格按会话回传
+- 每次上传随机生成 AES 密钥
+- 通过 stdio 本地运行，无网络端口暴露
 
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## License
+## 许可证
 
 MIT
