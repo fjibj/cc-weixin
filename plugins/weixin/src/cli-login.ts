@@ -19,40 +19,48 @@ if (arg === "clear") {
 }
 
 /**
- * Register weixin MCP server in ~/.claude/.mcp.json
- * so `server:weixin` works from any directory.
+ * Resolve the plugin directory (cache or local dev).
  */
-function registerMcpServer(): void {
-  // Find plugin cache dir
+function resolvePluginDir(): string {
   const cacheBase = join(homedir(), ".claude", "plugins", "cache", "cc-weixin", "weixin");
-  let pluginDir = resolve(dirname(import.meta.dir), ".");
-
   if (existsSync(cacheBase)) {
     try {
       const versions = readdirSync(cacheBase).sort();
       if (versions.length > 0) {
-        pluginDir = join(cacheBase, versions[versions.length - 1]);
+        return join(cacheBase, versions[versions.length - 1]);
       }
     } catch {}
   }
+  return resolve(dirname(import.meta.dir), ".");
+}
 
-  const mcpFile = join(homedir(), ".claude", ".mcp.json");
-  let config: { mcpServers: Record<string, unknown> } = { mcpServers: {} };
+/**
+ * Register weixin MCP server in the project's .mcp.json.
+ * `server:weixin` only checks the current directory's .mcp.json,
+ * so this must be called from the user's working directory via the skill.
+ */
+function registerMcpServer(): void {
+  const pluginDir = resolvePluginDir();
 
-  if (existsSync(mcpFile)) {
+  // Write to current working directory's .mcp.json (for server:weixin channel)
+  const projectMcpFile = join(process.cwd(), ".mcp.json");
+  let projectConfig: { mcpServers: Record<string, unknown> } = { mcpServers: {} };
+
+  if (existsSync(projectMcpFile)) {
     try {
-      config = JSON.parse(readFileSync(mcpFile, "utf-8"));
-      config.mcpServers = config.mcpServers || {};
+      projectConfig = JSON.parse(readFileSync(projectMcpFile, "utf-8"));
+      projectConfig.mcpServers = projectConfig.mcpServers || {};
     } catch {}
   }
 
-  config.mcpServers.weixin = {
+  projectConfig.mcpServers.weixin = {
     command: "bash",
     args: ["-c", `cd "${pluginDir}" && exec bun server.ts`],
   };
 
-  writeFileSync(mcpFile, JSON.stringify(config, null, 2), "utf-8");
-  console.log(`\nMCP server registered: ${mcpFile}`);
+  writeFileSync(projectMcpFile, JSON.stringify(projectConfig, null, 2), "utf-8");
+  console.log(`\nMCP server registered: ${projectMcpFile}`);
+  console.log(`  Plugin directory: ${pluginDir}`);
 }
 
 // Check existing account
