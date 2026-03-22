@@ -1,19 +1,15 @@
 {
   "name": "cc-weixin",
+  "description": "WeChat channel plugin for Claude Code via official iLink Bot API",
   "owner": {
     "name": "qufei1993"
-  },
-  "metadata": {
-    "description": "WeChat channel plugin for Claude Code via official iLink Bot API"
   },
   "plugins": [
     {
       "name": "weixin",
-      "source": "./plugins/weixin",
       "description": "WeChat (微信) channel for Claude Code — connect WeChat to Claude Code via official iLink Bot API",
-      "version": "0.1.0",
-      "license": "MIT",
-      "keywords": ["weixin", "wechat", "messaging", "channel"]
+      "source": "./plugins/weixin",
+      "category": "messaging"
     }
   ]
 }
