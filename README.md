@@ -48,6 +48,8 @@ cd cc-weixin
 /plugin install weixin@cc-weixin
 ```
 
+安装之后需要重启 Claude Code
+
 ## 配置
 
 ### 1. 连接微信账号
