@@ -26,7 +26,11 @@ Otherwise, run `bun src/cli-login.ts` and wait for the script to complete.
 
 The script handles everything: checking existing accounts, displaying the QR code, polling for scan result, and saving credentials.
 
-After connecting, remind the user to restart Claude Code with:
+After connecting, remind the user to restart Claude Code to activate the channel. For plugin installs:
+```
+claude --channels plugin:weixin@cc-weixin
+```
+For local development:
 ```
 claude --dangerously-load-development-channels server:weixin
 ```
