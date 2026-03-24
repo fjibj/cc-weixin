@@ -25,11 +25,9 @@ cd "${CLAUDE_PLUGIN_ROOT:-$(dirname $(dirname $0))}" && bun install --no-summary
 
 The script handles everything: checking existing accounts, displaying the QR code, polling for scan result, and saving credentials.
 
-The script automatically registers the weixin MCP server globally using `claude mcp add --scope user`, so `server:weixin` works from any directory.
-
 After connecting, tell the user to restart Claude Code with:
 ```
-claude --dangerously-load-development-channels server:weixin
+claude --dangerously-load-development-channels plugin:weixin@cc-weixin
 ```
 
-**Do NOT mention** `claude --channels plugin:weixin@cc-weixin` — this requires an official allowlist and is not yet available.
+**Do NOT mention** `claude --channels plugin:weixin@cc-weixin` (without `--dangerously-load-development-channels`) — this requires an official allowlist and is not yet available.

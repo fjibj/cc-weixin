@@ -20,7 +20,7 @@ import { getConfig, sendTyping } from "./src/api.js";
 import { TypingStatus } from "./src/types.js";
 
 const server = new Server(
-  { name: "weixin", version: "0.1.1" },
+  { name: "weixin", version: "0.1.2" },
   {
     capabilities: {
       experimental: { "claude/channel": {} },
