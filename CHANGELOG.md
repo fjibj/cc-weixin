@@ -10,6 +10,20 @@
 - **启动命令**：改用 `plugin:weixin@cc-weixin` 替代 `server:weixin`，无需再手动注册全局 MCP
 - **简化登录流程**：移除 `/weixin:configure` 中的全局 MCP 注册步骤，升级插件后不再需要重新运行 `/weixin:configure`
 
+### ⚠️ 从 v0.1.1 升级注意
+
+1. **清除旧的全局 MCP 注册**（否则可能导致消息无法接收，详见 [#10](https://github.com/qufei1993/cc-weixin/issues/10)）：
+   ```bash
+   claude mcp remove weixin --scope user
+   ```
+2. **使用新的启动命令**：
+   ```bash
+   # 旧（不再使用）
+   claude --dangerously-load-development-channels server:weixin
+   # 新
+   claude --dangerously-load-development-channels plugin:weixin@cc-weixin
+   ```
+
 ## [0.1.1] - 2026-03-24
 
 ### 修复
