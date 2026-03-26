@@ -83,6 +83,7 @@ export interface UploadedFileInfo {
   fileSize: number;
   rawSize: number;
   fileName: string;
+  filekey: string;  // 添加 filekey
 }
 
 export async function uploadFile(params: {
@@ -137,14 +138,18 @@ export async function uploadFile(params: {
   }
 
   // Get encrypted param from response header
-  const encryptQueryParam = uploadResult.headers.get("x-encrypted-param") || "";
+  // Use x-encrypted-query-param (longer, for download), fallback to x-encrypted-param
+  const encryptQueryParam = uploadResult.headers.get("x-encrypted-query-param") || uploadResult.headers.get("x-encrypted-param") || "";
 
   return {
     encryptQueryParam,
-    aesKey: Buffer.from(aesKey.toString("hex")).toString("base64"),
+    aesKey: mediaType === UploadMediaType.FILE
+      ? Buffer.from(aesKey.toString("hex")).toString("base64")  // FILE: base64(hex string)
+      : aesKey.toString("base64"),  // IMAGE/VIDEO: base64(raw bytes)
     fileSize,
     rawSize,
     fileName: basename(filePath),
+    filekey,  // 返回 filekey
   };
 }
 
