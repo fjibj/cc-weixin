@@ -112,8 +112,8 @@ async function processNewMessages() {
     const messages: Message[] = JSON.parse(data);
     const lastCheckTime = await getLastCheckTime();
 
-    // 筛选出新消息（大于等于，确保不遗漏相同时间戳的消息）
-    const newMessages = messages.filter(m => m.timestamp >= lastCheckTime);
+    // 筛选出新消息（严格大于，相同时间戳的消息在重置后会被重新处理）
+    const newMessages = messages.filter(m => m.timestamp > lastCheckTime);
 
     if (newMessages.length === 0) {
       console.log('[]'); // 输出空数组表示没有新消息
@@ -129,6 +129,16 @@ async function processNewMessages() {
     // 更新最新时间戳
     const latestTimestamp = Math.max(...sortedMessages.map(m => m.timestamp));
     await saveLastCheckTime(latestTimestamp);
+
+    // 发送"正在处理"回复（自动确认）
+    for (const msg of sortedMessages) {
+      try {
+        await replyToWeChat(msg.chatId, '消息已收到，正在处理中...', msg.contextToken);
+        console.error(`[auto-process] 已发送确认回复给 ${msg.chatId}`);
+      } catch (err) {
+        console.error(`[auto-process] 发送回复失败:`, err);
+      }
+    }
 
     // 输出新消息（JSON 格式，供外部解析）
     console.log(JSON.stringify(sortedMessages, null, 2));
@@ -242,38 +252,38 @@ async function main() {
     }
 
   } else {
-    // 默认：检查消息并自动调用 Harness 处理
+    // 默认：检查消息并触发 Harness 处理流程
     await ensureMcpServer();
 
     // 先处理新消息
     await processNewMessages();
 
-    // 自动调用 Harness 处理
-    const { exec } = await import('child_process');
-    const { promisify } = await import('util');
-    const execAsync = promisify(exec);
+    // 读取 pending.json 中的消息
+    const pendingData = await readFile(PENDING_FILE, 'utf-8');
+    const { messages: pendingMessages } = JSON.parse(pendingData);
 
+    if (!pendingMessages || pendingMessages.length === 0) {
+      console.log('[]');
+      return;
+    }
 
-    try {
-      const harnessCmd = `cd "${process.cwd()}" && bun run auto-harness.ts`;
-      const { stdout, stderr } = await execAsync(harnessCmd, { timeout: 30000 });
-
-      if (stderr) {
-        console.error('[Harness] stderr:', stderr);
-      }
-
-      if (stdout) {
-        try {
-          const messages = JSON.parse(stdout);
-          if (messages.length > 0) {
-            console.log(`[Harness] ${messages.length} message(s) processed`);
-          }
-        } catch {
-          // ignore parse error
-        }
-      }
-    } catch (err: any) {
-      console.error('[Harness] Error:', err.message);
+    // 输出消息供当前会话处理（带特殊标记）
+    console.log('=== WECHAT_MESSAGES_START ===');
+    console.log(JSON.stringify(pendingMessages, null, 2));
+    console.log('=== WECHAT_MESSAGES_END ===');
+    console.error(`[auto-process] 发现 ${pendingMessages.length} 条新消息，请在当前会话中使用 Harness 流程处理`);
+    console.error('处理步骤：');
+    console.error('1. /harness-plan - 创建处理计划');
+    console.error('2. /harness-work - 执行计划');
+    console.error('3. /harness-review - 审查结果');
+    console.error('4. 使用 reply 命令发送最终回复');
+    console.error('');
+    console.error('每条消息信息：');
+    for (const msg of pendingMessages) {
+      console.error(`- 消息: ${msg.text.substring(0, 50)}...`);
+      console.error(`  chatId: ${msg.chatId}`);
+      console.error(`  contextToken: ${msg.contextToken}`);
+      console.error(`  timestamp: ${msg.timestamp}`);
     }
   }
 }
