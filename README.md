@@ -30,21 +30,27 @@
 
 本次更新包含以下重要改进：
 
-### 1. 智能消息处理架构
+### 1. Harness 自动化集成 (NEW)
+- **自动 Harness 处理**: 微信消息自动走 Harness 流程 (Plan → Work → Review → Reply)
+- **新增 auto-harness.ts**: 消息去重和 Harness 队列管理
+- **改进 auto-process.ts**: 默认行为自动调用 Harness，无需额外参数
+- **使用方式**: `bun run auto-process.ts` 自动触发 Harness 处理
+
+### 2. 智能消息处理架构
 - **改进前**: 硬编码关键词匹配，只能处理固定命令
 - **改进后**: Claude 智能理解自然语言，动态处理请求
 - **优势**: 支持复杂多变的用户请求，无需预定义关键词
 
-### 2. 消息发送功能修复
+### 3. 消息发送功能修复
 - ✅ 修复 IMAGE 类型消息发送（解决"已过期"问题）
 - ✅ 修复 FILE 类型消息发送（解决文件接收问题）
 - ✅ 优化 CDN 文件上传加密处理
 
-### 3. 新增回复方式
+### 4. 新增回复方式
 - `reply-file` 命令：从文件发送多行格式化消息
 - 保留原有 `reply` 命令用于简单回复
 
-### 4. IMA 知识库集成
+### 5. IMA 知识库集成
 - 支持自动上传笔记到 IMA 知识库
 - 一键生成文档并上传
 
@@ -55,9 +61,8 @@
 - [Bun](https://bun.sh) 运行时
 - [Claude Code](https://claude.ai/code)（需支持 channel 功能）
 - 微信账号
-  - iOS：微信 8.0.70 或更高版本，路径：**我 → 设置 → 插件 → ClawBot（如果支持了，能看到这个插件）**
+  - iOS：微信 8.0.70 或更高版本
   - Android：微信 8.0.69 或更高版本
-  - 该插件目前仍在灰度测试阶段，部分用户可能暂时无法开通
 
 ## 安装
 
@@ -67,22 +72,6 @@
 /plugin marketplace add qufei1993/cc-weixin
 /plugin install weixin@cc-weixin
 ```
-
-或从本地目录安装（开发用）：
-
-```bash
-git clone https://github.com/qufei1993/cc-weixin.git
-cd cc-weixin
-```
-
-在 Claude Code 中，将当前目录添加为本地 marketplace 并安装插件：
-
-```
-/plugin marketplace add /path/to/cc-weixin
-/plugin install weixin@cc-weixin
-```
-
-安装之后需要重启 Claude Code
 
 ## 配置
 
@@ -96,13 +85,9 @@ cd cc-weixin
 
 ### 2. 启动 Claude Code 并启用微信 channel
 
-`/weixin:configure` 连接成功后，在任意目录启动：
-
 ```bash
 claude --dangerously-load-development-channels plugin:weixin@cc-weixin
 ```
-
-> **注意**：`--channels plugin:weixin@cc-weixin`（不带 `--dangerously-load-development-channels`）需要官方 allowlist 批准，目前尚未开放，请使用上述方式启动。
 
 ### 3. 配对微信用户
 
@@ -112,89 +97,30 @@ claude --dangerously-load-development-channels plugin:weixin@cc-weixin
 /weixin:access pair 123456
 ```
 
-### 4. 锁定访问（推荐）
-
-```
-/weixin:access policy allowlist
-```
-
-这将阻止新用户获取配对码。详见 [ACCESS.md](plugins/weixin/ACCESS.md)。
-
 ## 使用
 
 连接后，从微信发送的消息将出现在 Claude Code 中。Claude 的回复会发送回微信。
 
-### 支持的消息类型
+### Harness 自动化处理
 
-| 方向 | 文本 | 图片 | 视频 | 文件 | 语音 |
-|------|------|------|------|------|------|
-| 接收 | ✓    | ✓    | —    | ✓    | ✓    |
-| 发送 | ✓    | ✓    | —    | ✓    | ✓    |
+启用 Harness 后，微信消息自动走完整处理流程：
 
-### Skills 命令
-
-| 命令 | 说明 |
-|------|------|
-| `/weixin:configure` | 连接微信账号（扫码登录） |
-| `/weixin:configure clear` | 断开微信账号 |
-| `/weixin:access` | 管理访问控制 |
-
-## 升级
-
-当插件有新版本发布时，在 Claude Code 中执行：
-
-```
-/plugin update weixin@cc-weixin
-```
-
-如果更新后仍使用旧版本，可以清除缓存后重新安装：
+1. **Plan**: 分析消息意图，制定处理计划
+2. **Work**: 执行任务（搜索、计算、文件操作等）
+3. **Review**: 多维度审查（安全、性能、质量）
+4. **Reply**: 发送详细回复到微信
 
 ```bash
-rm -rf ~/.claude/plugins/cache/cc-weixin
-```
-
-然后在 Claude Code 中重新安装：
-
-```
-/plugin install weixin@cc-weixin
-```
-
-版本变更记录详见 [CHANGELOG.md](CHANGELOG.md)。
-
-## 卸载
-
-```
-/weixin:configure clear
-/plugin uninstall weixin@cc-weixin
-/plugin marketplace remove cc-weixin
-```
-
-清理全局 MCP 注册和缓存：
-
-```bash
-claude mcp remove weixin --scope user
-rm -rf ~/.claude/plugins/cache/cc-weixin
-```
-
-## 架构
-
-```
-微信用户 ──DM──→ 微信服务器 (ilinkai.weixin.qq.com)
-                       ↑ 长轮询 getUpdates
-              微信通信层 (src/)          ← 平台无关，可复用
-                       ↓ onMessage 回调
-              平台适配层 (server.ts)     ← Claude Code / Codex / ...
-                       ↓ notifications/channel
-              AI 编程工具 Session (stdio)
+# 手动触发消息处理（自动调用 Harness）
+cd ~/.claude/plugins/cache/cc-weixin/weixin/0.1.0
+bun run auto-process.ts
 ```
 
 ## 安全设计
 
-- 使用微信官方 iLink Bot API（非逆向工程）
+- 使用微信官方 iLink Bot API
 - 凭证文件 `chmod 0600` 保护
 - 默认启用配对码访问控制
-- Context Token 严格按会话回传
-- 每次上传随机生成 AES 密钥
 - 通过 stdio 本地运行，无网络端口暴露
 
 ## 许可证

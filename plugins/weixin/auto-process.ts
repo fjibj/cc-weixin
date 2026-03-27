@@ -112,7 +112,7 @@ async function processNewMessages() {
     const messages: Message[] = JSON.parse(data);
     const lastCheckTime = await getLastCheckTime();
 
-    // 筛选出新消息
+    // 筛选出新消息（大于等于，确保不遗漏相同时间戳的消息）
     const newMessages = messages.filter(m => m.timestamp >= lastCheckTime);
 
     if (newMessages.length === 0) {
@@ -201,9 +201,80 @@ async function main() {
     await replyToWeChat(to, text, contextToken);
     console.log('回复已发送');
 
+  } else if (command === 'harness') {
+    // 使用 Harness 流程处理消息
+    await ensureMcpServer();
+
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+
+    try {
+      // 先检查并保存新消息到 pending.json
+      await processNewMessages();
+
+      // 调用 auto-harness.ts 处理
+      const harnessCmd = `cd "${process.cwd()}" && bun run auto-harness.ts`;
+      const { stdout, stderr } = await execAsync(harnessCmd, { timeout: 30000 });
+
+      if (stderr) {
+        console.error('[Harness] stderr:', stderr);
+      }
+
+      if (stdout) {
+        try {
+          const messages = JSON.parse(stdout);
+          if (messages.length > 0) {
+            console.log(`[Harness] ${messages.length} message(s) queued for processing`);
+            // 输出消息供 cron 捕获并触发 Harness
+            console.log(JSON.stringify({
+              type: 'harness_queue',
+              messages: messages
+            }));
+          }
+        } catch {
+          console.log('[Harness] Output:', stdout);
+        }
+      }
+    } catch (err: any) {
+      console.error('[Harness] Error:', err.message);
+      process.exit(1);
+    }
+
   } else {
-    // 默认：检查并输出新消息
+    // 默认：检查消息并自动调用 Harness 处理
+    await ensureMcpServer();
+
+    // 先处理新消息
     await processNewMessages();
+
+    // 自动调用 Harness 处理
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+
+
+    try {
+      const harnessCmd = `cd "${process.cwd()}" && bun run auto-harness.ts`;
+      const { stdout, stderr } = await execAsync(harnessCmd, { timeout: 30000 });
+
+      if (stderr) {
+        console.error('[Harness] stderr:', stderr);
+      }
+
+      if (stdout) {
+        try {
+          const messages = JSON.parse(stdout);
+          if (messages.length > 0) {
+            console.log(`[Harness] ${messages.length} message(s) processed`);
+          }
+        } catch {
+          // ignore parse error
+        }
+      }
+    } catch (err: any) {
+      console.error('[Harness] Error:', err.message);
+    }
   }
 }
 
