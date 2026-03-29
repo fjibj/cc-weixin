@@ -123,6 +123,60 @@ cd ~/.claude/plugins/cache/cc-weixin/weixin/0.1.0
 bun run auto-process.ts
 ```
 
+### 消息处理流水线
+
+实际的消息处理流程如下：
+
+```
+[微信用户] → [MCP Server] → [queue.json]
+                                    ↓
+                            [auto-process.ts]
+                                    ↓
+                    ┌───────────────────────────────┐
+                    │  1. 读取 last-check.json      │
+                    │  2. 获取上次处理时间戳        │
+                    │  3. 从 queue.json 读取消息    │
+                    │  4. 筛选新消息                │
+                    │     timestamp > lastTimestamp │
+                    └───────────────────────────────┘
+                                    ↓
+                    ┌───────────────────────────────┐
+                    │  savePendingMessages()        │
+                    │  - 读取现有 pending.json      │
+                    │  - 按 timestamp 去重          │
+                    │  - 追加新消息（不删除旧消息） │
+                    └───────────────────────────────┘
+                                    ↓
+                    ┌───────────────────────────────┐
+                    │  Harness 处理流程             │
+                    │  ├─ Plan: 分析意图           │
+                    │  ├─ Work: 执行工具调用       │
+                    │  ├─ Review: 审查结果         │
+                    │  └─ Reply: 生成回复          │
+                    └───────────────────────────────┘
+                                    ↓
+                            写入临时文件
+                                    ↓
+                    ┌───────────────────────────────┐
+                    │  更新 last-check.json         │
+                    │  max(timestamp)               │
+                    └───────────────────────────────┘
+                                    ↓
+                            [auto-process.ts reply-file]
+                                    ↓
+                            [send.ts] → [微信用户]
+                                    ↓
+                            [remove 命令删除已处理消息]
+```
+
+**流程说明**：
+1. **queue.json 不修改**：由 MCP Server 自然管理消息队列
+2. **时间戳判断**：使用 `last-check.json` 记录上次处理的最大时间戳
+3. **消息筛选**：只处理 `timestamp > lastTimestamp` 的新消息
+4. **消息保存**：`savePendingMessages()` 使用追加模式，仅去重不删除
+5. **Harness 处理**：消息走完整 Harness 流程（Plan → Work → Review → Reply）
+6. **消息删除**：通过 `remove` 命令从 pending.json 删除已处理消息
+
 ## 安全设计
 
 - 使用微信官方 iLink Bot API
