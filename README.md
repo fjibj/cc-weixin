@@ -123,6 +123,8 @@ cd ~/.claude/plugins/cache/cc-weixin/weixin/0.1.0
 bun run auto-process.ts
 ```
 
+## 消息处理机制
+
 ### 消息处理流水线
 
 实际的消息处理流程如下：
@@ -152,6 +154,43 @@ bun run auto-process.ts
                     │  ├─ Plan: 分析意图           │
                     │  ├─ Work: 执行工具调用       │
                     │  ├─ Review: 审查结果         │
+                    │  └─ Reply: 生成回复          │
+                    └───────────────────────────────┘
+                                    ↓
+                            写入临时文件
+                                    ↓
+                    ┌───────────────────────────────┐
+                    │  更新 last-check.json         │
+                    │  max(timestamp)               │
+                    └───────────────────────────────┘
+                                    ↓
+                            [auto-process.ts reply-file]
+                                    ↓
+                            [send.ts] → [微信用户]
+                                    ↓
+                            [remove 命令删除已处理消息]
+```
+
+**流程说明**：
+1. **queue.json 不修改**：由 MCP Server 自然管理消息队列
+2. **时间戳判断**：使用 `last-check.json` 记录上次处理的最大时间戳
+3. **消息筛选**：只处理 `timestamp > lastTimestamp` 的新消息
+4. **消息保存**：`savePendingMessages()` 使用追加模式，仅去重不删除
+5. **Harness 处理**：消息走完整 Harness 流程（Plan → Work → Review → Reply）
+6. **消息删除**：通过 `remove` 命令从 pending.json 删除已处理消息
+
+## Memory 文档
+
+项目相关的记忆和配置文档存放在 `memory/` 目录：
+
+| 文件 | 说明 |
+|------|------|
+| [MEMORY.md](memory/MEMORY.md) | 记忆文档索引 |
+| [harness-workflow-rule.md](memory/harness-workflow-rule.md) | Harness 流程处理准则（最高优先级） |
+| [ima-usage-guide.md](memory/ima-usage-guide.md) | IMA 知识库使用指南 |
+| [weixin-harness-workflow.md](memory/weixin-harness-workflow.md) | 微信消息 Harness 工作流配置 |
+
+这些文档记录了项目的关键配置和使用规则，供 Claude Code 在不同会话间保持上下文一致。
                     │  └─ Reply: 生成回复          │
                     └───────────────────────────────┘
                                     ↓
