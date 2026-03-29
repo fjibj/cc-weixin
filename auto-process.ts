@@ -83,8 +83,14 @@ async function getLastCheckTime(): Promise<number> {
   try {
     const data = await readFile(LAST_CHECK_FILE, 'utf-8');
     const { lastTimestamp } = JSON.parse(data);
-    return lastTimestamp || 0;
-  } catch {
+    // 确保返回有效的时间戳（大于0），否则使用队列中的最大时间戳
+    if (typeof lastTimestamp === 'number' && lastTimestamp > 0) {
+      return lastTimestamp;
+    }
+    console.error('[getLastCheckTime] 无效的时间戳:', lastTimestamp, '使用队列最大时间戳');
+    return 0;
+  } catch (error) {
+    console.error('[getLastCheckTime] 读取失败:', error);
     return 0;
   }
 }
@@ -129,7 +135,15 @@ async function processNewMessages() {
     const data = await readFile(QUEUE_FILE, 'utf-8');
     const messages: Message[] = JSON.parse(data);
 
-    const lastCheckTime = await getLastCheckTime();
+    let lastCheckTime = await getLastCheckTime();
+
+    // 安全检查：如果 lastCheckTime 为 0 或无效，使用队列中的最大时间戳
+    if (lastCheckTime === 0 && messages.length > 0) {
+      const maxQueueTimestamp = Math.max(...messages.map(m => m.timestamp));
+      console.error(`[processNewMessages] lastCheckTime 为 0，使用队列最大时间戳: ${maxQueueTimestamp}`);
+      lastCheckTime = maxQueueTimestamp;
+      await saveLastCheckTime(maxQueueTimestamp);
+    }
 
     // 筛选出新消息（严格大于 lastCheckTime）
     const newMessages = messages.filter(m => m.timestamp > lastCheckTime);

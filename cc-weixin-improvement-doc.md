@@ -9,6 +9,16 @@
 
 ## 更新日志
 
+### v1.2 (2026-03-29)
+**修复 getLastCheckTime 隐藏故障**:
+1. **问题描述**: `getLastCheckTime()` 函数在 `last-check.json` 读取失败或 `lastTimestamp` 字段无效时返回 0
+2. **影响**: 当 `lastCheckTime = 0` 时，`messages.filter(m => m.timestamp > 0)` 会把 queue.json 中所有历史消息都当作新消息，导致 pending.json 堆积大量重复消息
+3. **根本原因**: `return lastTimestamp || 0` 会把任何 falsy 值（null、undefined、0）都转为 0
+4. **修复方案**:
+   - 增强类型检查：验证 `lastTimestamp` 是有效数字且大于 0
+   - 添加错误日志：使用 `console.error` 记录读取失败和无效时间戳
+   - 安全回退机制：当 `lastCheckTime = 0` 且队列非空时，使用队列最大时间戳作为基准
+
 ### v1.1 (2026-03-29)
 **消息队列处理优化**:
 1. **queue.json 不再清空** - 改为自然累积，由 MCP Server 管理

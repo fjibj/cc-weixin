@@ -26,6 +26,16 @@
 | Claude Code | ✅ 已支持 |
 | Codex (OpenAI) | 🔜 计划中 |
 
+## 最新改进 (v0.2.2)
+
+### 1. 修复 getLastCheckTime 隐藏故障
+- **问题**: `getLastCheckTime()` 在读取失败或时间戳无效时返回 0，导致所有历史消息被当作新消息处理
+- **原因**: `return lastTimestamp || 0` 会将任何 falsy 值（包括 null、undefined）转为 0
+- **修复**:
+  - 增强类型检查：验证 `lastTimestamp` 是有效数字且大于 0
+  - 添加错误日志：记录读取失败和无效时间戳情况
+  - 安全回退：当 `lastCheckTime = 0` 时，自动使用队列最大时间戳作为基准
+
 ## 最新改进 (v0.2.1)
 
 ### 1. 消息处理机制优化
