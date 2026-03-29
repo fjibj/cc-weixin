@@ -96,20 +96,17 @@ async function saveLastCheckTime(timestamp: number) {
   }, null, 2));
 }
 
-async function savePendingMessages(newMessages: Message[], lastCheckTime: number) {
+async function savePendingMessages(newMessages: Message[]) {
   try {
     // 读取现有的 pending 消息
     const existingData = await readFile(PENDING_FILE, 'utf-8');
     const { messages: existingMessages } = JSON.parse(existingData);
 
-    // 过滤掉时间戳小于等于 lastCheckTime 的旧消息（防止历史消息累积）
-    const validExistingMessages = existingMessages.filter((m: Message) => m.timestamp > lastCheckTime);
-
     // 合并新旧消息，避免重复（按 timestamp 去重）
-    const existingTimestamps = new Set(validExistingMessages.map((m: Message) => m.timestamp));
+    const existingTimestamps = new Set(existingMessages.map((m: Message) => m.timestamp));
     const uniqueNewMessages = newMessages.filter(m => !existingTimestamps.has(m.timestamp));
 
-    const mergedMessages = [...validExistingMessages, ...uniqueNewMessages];
+    const mergedMessages = [...existingMessages, ...uniqueNewMessages];
 
     await writeFile(PENDING_FILE, JSON.stringify({
       messages: mergedMessages,
@@ -131,9 +128,10 @@ async function processNewMessages() {
 
     const data = await readFile(QUEUE_FILE, 'utf-8');
     const messages: Message[] = JSON.parse(data);
+
     const lastCheckTime = await getLastCheckTime();
 
-    // 筛选出新消息（严格大于，相同时间戳的消息在重置后会被重新处理）
+    // 筛选出新消息（严格大于 lastCheckTime）
     const newMessages = messages.filter(m => m.timestamp > lastCheckTime);
 
     if (newMessages.length === 0) {
@@ -147,8 +145,8 @@ async function processNewMessages() {
     // 按时间戳排序（从早到晚）
     const sortedMessages = newMessages.sort((a, b) => a.timestamp - b.timestamp);
 
-    // 保存到 pending.json 供外部处理（传入 lastCheckTime 过滤旧消息）
-    await savePendingMessages(sortedMessages, lastCheckTime);
+    // 保存到 pending.json 供外部处理（追加模式，保留所有现有消息）
+    await savePendingMessages(sortedMessages);
 
     // 更新最新时间戳
     const latestTimestamp = Math.max(...sortedMessages.map(m => m.timestamp));
@@ -197,7 +195,7 @@ async function main() {
     const data = await readFile(QUEUE_FILE, 'utf-8');
     const messages: Message[] = JSON.parse(data);
     const lastCheckTime = await getLastCheckTime();
-    const newMessages = messages.filter(m => m.timestamp >= lastCheckTime);
+    const newMessages = messages.filter(m => m.timestamp > lastCheckTime);
 
     console.log(JSON.stringify({
       lastTimestamp: lastCheckTime,
@@ -235,51 +233,7 @@ async function main() {
     await replyToWeChat(to, text, contextToken);
     console.log('回复已发送');
 
-  } 
-  /* 
-  else if (command === 'harness') {
-    // 使用 Harness 流程处理消息
-    await ensureMcpServer();
-
-    const { exec } = await import('child_process');
-    const { promisify } = await import('util');
-    const execAsync = promisify(exec);
-
-    try {
-      // 先检查并保存新消息到 pending.json
-      await processNewMessages();
-
-      // 调用 auto-harness.ts 处理
-      const harnessCmd = `cd "${process.cwd()}" && bun run auto-harness.ts`;
-      const { stdout, stderr } = await execAsync(harnessCmd, { timeout: 30000 });
-
-      if (stderr) {
-        console.error('[Harness] stderr:', stderr);
-      }
-
-      if (stdout) {
-        try {
-          const messages = JSON.parse(stdout);
-          if (messages.length > 0) {
-            console.log(`[Harness] ${messages.length} message(s) queued for processing`);
-            // 输出消息供 cron 捕获并触发 Harness
-            console.log(JSON.stringify({
-              type: 'harness_queue',
-              messages: messages
-            }));
-          }
-        } catch {
-          console.log('[Harness] Output:', stdout);
-        }
-      }
-    } catch (err: any) {
-      console.error('[Harness] Error:', err.message);
-      process.exit(1);
-    }
-
-  } 
-  */
-  else if (command === 'remove') {
+  }   else if (command === 'remove') {
     // 删除指定时间戳的消息（处理完一条删除一条）
     const [, timestampStr] = args;
     if (!timestampStr) {

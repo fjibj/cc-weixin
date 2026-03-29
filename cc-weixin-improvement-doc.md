@@ -1,8 +1,25 @@
 # cc-weixin 插件微信交互处理改进文档
 
-> 文档版本: 1.0
-> 整理时间: 2026-03-25
+> 文档版本: 1.1
+> 整理时间: 2026-03-29
+> 更新内容: 消息队列处理逻辑优化
 > 整理人: Claude Code
+
+---
+
+## 更新日志
+
+### v1.1 (2026-03-29)
+**消息队列处理优化**:
+1. **queue.json 不再清空** - 改为自然累积，由 MCP Server 管理
+2. **pending.json 追加模式** - 保留所有消息，仅追加新消息（按 timestamp 去重）
+3. **消息删除机制** - 只有通过 `remove` 命令才会从 pending.json 删除
+4. **lastCheckTime 过滤** - 使用 `timestamp > lastCheckTime` 筛选新消息
+
+**优势**:
+- 避免消息丢失风险
+- 支持消息重试机制
+- 更清晰的处理状态追踪
 
 ---
 
@@ -407,7 +424,7 @@ return `笔记已上传到 IMA\n文档 ID: ${result.doc_id}`;
 
 ---
 
-**当前实际的流水线实现**:
+**当前实际的流水线实现 (v1.1)**:
 
 ```
 [微信用户] → [MCP Server] → [queue.json]
@@ -417,14 +434,16 @@ return `笔记已上传到 IMA\n文档 ID: ${result.doc_id}`;
                     ┌───────────────────────────────┐
                     │  1. 读取 last-check.json      │
                     │  2. 获取上次处理时间戳        │
-                    │  3. 筛选新消息                │
+                    │  3. 从 queue.json 读取消息    │
+                    │  4. 筛选新消息                │
                     │     timestamp > lastTimestamp │
                     └───────────────────────────────┘
                                     ↓
                     ┌───────────────────────────────┐
                     │  savePendingMessages()        │
-                    │  - 过滤历史消息               │
-                    │  - merge-append 新消息        │
+                    │  - 读取现有 pending.json      │
+                    │  - 按 timestamp 去重          │
+                    │  - 追加新消息（不删除旧消息） │
                     └───────────────────────────────┘
                                     ↓
                     ┌───────────────────────────────┐
@@ -445,25 +464,30 @@ return `笔记已上传到 IMA\n文档 ID: ${result.doc_id}`;
                             [auto-process.ts reply-file]
                                     ↓
                             [send.ts] → [微信用户]
+                                    ↓
+                            [remove 命令删除已处理消息]
 ```
 
-**流程说明**：
-1. **时间戳判断**：使用 `last-check.json` 记录上次处理的最大时间戳
-2. **消息筛选**：只处理 `timestamp > lastTimestamp` 的新消息
-3. **消息保存**：`savePendingMessages()` 使用 merge-append，过滤旧消息
-4. **Harness 处理**：消息走完整 Harness 流程（Plan → Work → Review → Reply）
-5. **时间戳更新**：处理完成后更新 `last-check.json`
+**流程说明 (v1.1)**：
+1. **queue.json 不修改**：读取后不做任何修改，由 MCP Server 自然管理
+2. **时间戳判断**：使用 `last-check.json` 记录上次处理的最大时间戳
+3. **消息筛选**：只处理 `timestamp > lastTimestamp` 的新消息
+4. **消息保存**：`savePendingMessages()` 使用追加模式，仅去重不删除
+5. **Harness 处理**：消息走完整 Harness 流程（Plan → Work → Review → Reply）
+6. **时间戳更新**：处理完成后更新 `last-check.json`
+7. **消息删除**：通过 `remove` 命令从 pending.json 删除已处理消息
 
 ---
 
 **关键差异对比**:
 
-| 维度 | 文档设计（理想） | 当前实现（实际） |
-|-----|-----------------|-----------------|
-| 回复生成方式 | Claude 直接生成内容 | Claude 生成内容 |
-| 发送方式 | 直接调用 reply 命令 | 先写入文件，再调用 reply-file |
-| 中间环节 | 无 | 临时文件中转 |
-| 适用场景 | 简单短文本回复 | 复杂多行格式化回复 |
+| 维度 | v1.0 | v1.1 (当前) |
+|-----|------|-------------|
+| queue.json 处理 | 读取后清空或回写旧消息 | 不修改，自然累积 |
+| pending.json 模式 | merge-append，过滤旧消息 | 纯追加，仅去重 |
+| 消息删除 | 自动过滤 | 显式 remove 命令 |
+| 消息丢失风险 | 中（处理中崩溃会丢） | 低（pending 保留所有） |
+| 重试支持 | 有限 | 完整（未 remove 可重处理） |
 
 ---
 
