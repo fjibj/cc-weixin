@@ -26,6 +26,13 @@
 | Claude Code | ✅ 已支持 |
 | Codex (OpenAI) | 🔜 计划中 |
 
+## 最新改进 (v0.2.1)
+
+### 1. 消息处理机制优化
+- **修复消息累积问题**: `savePendingMessages` 现在会过滤时间戳小于等于 `lastCheckTime` 的历史消息
+- **修复时间戳更新逻辑**: 无新消息时使用队列最大时间戳更新，避免重复检查
+- **添加 remove 命令**: 支持处理完单条消息后删除，`bun run auto-process.ts remove <timestamp>`
+
 ## 最新改进 (v0.2.0)
 
 本次更新包含以下重要改进：

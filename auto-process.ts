@@ -96,11 +96,32 @@ async function saveLastCheckTime(timestamp: number) {
   }, null, 2));
 }
 
-async function savePendingMessages(messages: Message[]) {
-  await writeFile(PENDING_FILE, JSON.stringify({
-    messages,
-    updatedAt: new Date().toISOString()
-  }, null, 2));
+async function savePendingMessages(newMessages: Message[], lastCheckTime: number) {
+  try {
+    // 读取现有的 pending 消息
+    const existingData = await readFile(PENDING_FILE, 'utf-8');
+    const { messages: existingMessages } = JSON.parse(existingData);
+
+    // 过滤掉时间戳小于等于 lastCheckTime 的旧消息（防止历史消息累积）
+    const validExistingMessages = existingMessages.filter((m: Message) => m.timestamp > lastCheckTime);
+
+    // 合并新旧消息，避免重复（按 timestamp 去重）
+    const existingTimestamps = new Set(validExistingMessages.map((m: Message) => m.timestamp));
+    const uniqueNewMessages = newMessages.filter(m => !existingTimestamps.has(m.timestamp));
+
+    const mergedMessages = [...validExistingMessages, ...uniqueNewMessages];
+
+    await writeFile(PENDING_FILE, JSON.stringify({
+      messages: mergedMessages,
+      updatedAt: new Date().toISOString()
+    }, null, 2));
+  } catch {
+    // 如果文件不存在或解析失败，直接写入新消息
+    await writeFile(PENDING_FILE, JSON.stringify({
+      messages: newMessages,
+      updatedAt: new Date().toISOString()
+    }, null, 2));
+  }
 }
 
 async function processNewMessages() {
@@ -117,16 +138,17 @@ async function processNewMessages() {
 
     if (newMessages.length === 0) {
       console.log('[]'); // 输出空数组表示没有新消息
-      // 即使没有新消息，也更新检查时间戳为当前时间，避免重复检查
-      await saveLastCheckTime(Date.now());
+      // 使用队列中最大时间戳更新，避免重复检查
+      const maxTimestamp = Math.max(...messages.map(m => m.timestamp), lastCheckTime);
+      await saveLastCheckTime(maxTimestamp);
       return;
     }
 
     // 按时间戳排序（从早到晚）
     const sortedMessages = newMessages.sort((a, b) => a.timestamp - b.timestamp);
 
-    // 保存到 pending.json 供外部处理
-    await savePendingMessages(sortedMessages);
+    // 保存到 pending.json 供外部处理（传入 lastCheckTime 过滤旧消息）
+    await savePendingMessages(sortedMessages, lastCheckTime);
 
     // 更新最新时间戳
     const latestTimestamp = Math.max(...sortedMessages.map(m => m.timestamp));
@@ -257,6 +279,40 @@ async function main() {
 
   } 
   */
+  else if (command === 'remove') {
+    // 删除指定时间戳的消息（处理完一条删除一条）
+    const [, timestampStr] = args;
+    if (!timestampStr) {
+      console.error('用法: bun run auto-process.ts remove <timestamp>');
+      process.exit(1);
+    }
+
+    const timestampToRemove = parseInt(timestampStr);
+
+    try {
+      const pendingData = await readFile(PENDING_FILE, 'utf-8');
+      const { messages } = JSON.parse(pendingData);
+
+      // 过滤掉指定时间戳的消息
+      const filteredMessages = messages.filter((m: Message) => m.timestamp !== timestampToRemove);
+
+      if (filteredMessages.length === messages.length) {
+        console.error(`未找到时间戳为 ${timestampToRemove} 的消息`);
+        process.exit(1);
+      }
+
+      await writeFile(PENDING_FILE, JSON.stringify({
+        messages: filteredMessages,
+        updatedAt: new Date().toISOString()
+      }, null, 2));
+
+      console.log(`已删除时间戳为 ${timestampToRemove} 的消息`);
+      console.log(`剩余 ${filteredMessages.length} 条未处理消息`);
+    } catch (err: any) {
+      console.error('删除消息失败:', err.message);
+      process.exit(1);
+    }
+  }
   else {
     // 默认：检查消息并触发 Harness 处理流程
     await ensureMcpServer();
