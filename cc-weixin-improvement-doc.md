@@ -9,6 +9,44 @@
 
 ## 更新日志
 
+### v1.3 (2026-03-30)
+**Bug 修复和体验优化**:
+
+1. **MCP 服务器检测修复**
+   - **问题**: `wmic process where` 命令返回 UTF-16 编码，Node.js 无法正确解析，导致 MCP 服务器状态检测失败
+   - **解决**: 改用 `tasklist /FI "IMAGENAME eq bun.exe" /FO CSV` 命令，输出为 ASCII 格式
+   - **验证**: 检测逻辑现在可靠运行，能正确识别 bun.exe 进程
+
+2. **换行符处理修复**
+   - **问题**: 命令行参数中的 `\n` 被当作字面量发送，没有变成真正的换行符
+   - **解决**: 在 `reply` 命令处理中添加 `.replace(/\\\\n/g, '\n')` 转换
+   - **效果**: 多行消息现在正确显示换行
+
+3. **多行消息自动检测**
+   - **问题**: 长文本或多行内容使用 `reply` 命令发送时格式混乱
+   - **解决**: 自动检测内容长度（>100字符）或包含换行符时，自动使用 `reply-file` 方式
+   - **实现**:
+     ```typescript
+     const processedText = text.replace(/\\n/g, '\n');
+     if (processedText.includes('\n') || processedText.length > 100) {
+       // 自动使用 reply-file
+     }
+     ```
+
+4. **自动回复确认**
+   - **新增功能**: 收到消息后自动发送"消息已收到，正在处理中..."
+   - **目的**: 让用户知道消息已被接收，避免重复发送
+   - **位置**: `auto-process.ts` 第172-179行
+
+5. **Harness 流程标准化**
+   - **文档更新**: 在 CLAUDE.md 中添加完整 Harness 流程说明
+   - **流程**: Plan → Work → Review → Reply
+   - **强制要求**: 每一步的结果必须返回给微信用户
+   - **新增 Memory 文件**:
+     - `harness-workflow-rule.md` - Harness 流程规则
+     - `weixin-reply-format-rule.md` - 消息回复格式规则
+     - `memory-location-analysis.md` - Memory 存储位置分析
+
 ### v1.2 (2026-03-29)
 **修复 getLastCheckTime 隐藏故障**:
 1. **问题描述**: `getLastCheckTime()` 函数在 `last-check.json` 读取失败或 `lastTimestamp` 字段无效时返回 0

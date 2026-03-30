@@ -30,8 +30,9 @@ interface Message {
 async function isMcpServerRunning(): Promise<boolean> {
   try {
     const isWindows = platform() === 'win32';
+    // Windows: 使用 tasklist 检查 bun.exe 进程
     const checkCmd = isWindows
-      ? 'wmic process where "CommandLine like \"%bun%server.ts%\"" get ProcessId 2>nul'
+      ? 'tasklist /FI "IMAGENAME eq bun.exe" /FO CSV'
       : 'ps aux | grep "bun.*server.ts" | grep -v grep';
 
     const result = await new Promise<string>((resolve) => {
@@ -41,7 +42,8 @@ async function isMcpServerRunning(): Promise<boolean> {
       child.on('close', () => resolve(output));
     });
 
-    return result.trim().length > 0 && !result.includes('No Instance');
+    // 检查结果中是否包含 bun.exe 且没有 "No tasks" 或 "信息"
+    return result.includes('bun.exe') && !result.includes('No tasks') && !result.includes('信息');
   } catch {
     return false;
   }
@@ -225,12 +227,32 @@ async function main() {
 
   } else if (command === 'reply') {
     // 发送回复
+    // 确保 MCP 服务器运行
+    await ensureMcpServer();
     const [, to, text, contextToken = ''] = args;
     if (!to || !text) {
       console.error('用法: bun run auto-process.ts reply <to> <text> [contextToken]');
       process.exit(1);
     }
-    await replyToWeChat(to, text, contextToken);
+
+    // 自动检测：如果包含换行符或超过100字符，使用 reply-file 方式
+    // 先将字面量 \n 转换为真正的换行符
+    const processedText = text.replace(/\\n/g, '\n');
+    if (processedText.includes('\n') || processedText.length > 100) {
+      console.error('[自动检测] 内容包含多行或超过100字符，自动使用 reply-file 方式');
+      // 写入临时文件
+      const tempFile = `C:\\Users\\Administrator\\.claude\\channels\\weixin\\temp_reply_${Date.now()}.txt`;
+      await writeFile(tempFile, processedText, 'utf-8');
+      await replyToWeChat(to, processedText, contextToken);
+      // 删除临时文件
+      try {
+        await import('fs/promises').then(fs => fs.unlink(tempFile));
+      } catch {
+        // 忽略删除错误
+      }
+    } else {
+      await replyToWeChat(to, processedText, contextToken);
+    }
     console.log('回复已发送');
 
   } else if (command === 'reply-file') {
@@ -303,9 +325,9 @@ async function main() {
     console.log('=== WECHAT_MESSAGES_END ===');
     console.error(`[auto-process] 发现 ${pendingMessages.length} 条新消息，请在当前会话中使用 Harness 流程处理`);
     console.error('处理步骤：');
-    console.error('1. /harness-plan - 创建处理计划');
-    console.error('2. /harness-work - 执行计划');
-    console.error('3. /harness-review - 审查结果');
+    console.error('1. /harness-plan - 创建处理计划，并回复');
+    console.error('2. /harness-work - 执行计划，并回复');
+    console.error('3. /harness-review - 审查结果，并回复');
     console.error('4. 使用 reply 命令发送最终回复');
     console.error('');
     console.error('每条消息信息：');
