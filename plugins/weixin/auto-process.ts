@@ -13,7 +13,6 @@ if (!account) {
 const QUEUE_FILE = 'C:\\Users\\Administrator\\.claude\\channels\\weixin\\queue.json';
 const LAST_CHECK_FILE = 'C:\\Users\\Administrator\\.claude\\channels\\weixin\\last-check.json';
 const PENDING_FILE = 'C:\\Users\\Administrator\\.claude\\channels\\weixin\\pending.json';
-const PERMISSIONS_FILE = 'C:\\Users\\Administrator\\.claude\\channels\\weixin\\pending_permissions.json';
 const MCP_LOG_FILE = 'C:\\Users\\Administrator\\.claude\\channels\\weixin\\mcp-server.log';
 
 interface Message {
@@ -25,17 +24,6 @@ interface Message {
   // 图片/媒体支持
   attachmentPath?: string;
   attachmentType?: string;
-}
-
-// 权限请求接口
-interface PermissionRequest {
-  requestId: string;      // 5位验证码
-  chatId: string;         // 用户ID
-  contextToken: string;   // 上下文token
-  toolName: string;       // 请求的工具名
-  description: string;    // 描述
-  timestamp: number;      // 创建时间
-  status: 'pending' | 'approved' | 'denied';  // 状态
 }
 
 // 检查 MCP 服务器是否运行
@@ -160,18 +148,7 @@ async function processNewMessages() {
     // 筛选出新消息（严格大于 lastCheckTime）
     const newMessages = messages.filter(m => m.timestamp > lastCheckTime);
 
-    // 【权限系统】检查是否有权限回复
-    let filteredMessages = newMessages;
-    if (newMessages.length > 0) {
-      const permissionTimestamps = await checkPermissionReplies(newMessages);
-      // 过滤掉已处理的权限回复消息
-      if (permissionTimestamps.size > 0) {
-        filteredMessages = newMessages.filter(m => !permissionTimestamps.has(m.timestamp));
-        console.error(`[权限系统] 已过滤 ${permissionTimestamps.size} 条权限回复消息`);
-      }
-    }
-
-    if (filteredMessages.length === 0) {
+    if (newMessages.length === 0) {
       console.log('[]'); // 输出空数组表示没有新消息
       // 使用队列中最大时间戳更新，避免重复检查
       const maxTimestamp = Math.max(...messages.map(m => m.timestamp), lastCheckTime);
@@ -180,7 +157,7 @@ async function processNewMessages() {
     }
 
     // 按时间戳排序（从早到晚）
-    const sortedMessages = filteredMessages.sort((a, b) => a.timestamp - b.timestamp);
+    const sortedMessages = newMessages.sort((a, b) => a.timestamp - b.timestamp);
 
     // 保存到 pending.json 供外部处理（追加模式，保留所有现有消息）
     await savePendingMessages(sortedMessages);
@@ -270,22 +247,7 @@ async function main() {
     await replyToWeChat(to, text, contextToken);
     console.log('回复已发送');
 
-  } else if (command === 'test-permission') {
-    // 测试权限请求功能
-    const [, to, contextToken = ''] = args;
-    if (!to) {
-      console.error('用法: bun run auto-process.ts test-permission <chatId> [contextToken]');
-      process.exit(1);
-    }
-    const requestId = await sendPermissionRequest(
-      to,
-      contextToken,
-      'Bash',
-      '执行系统命令测试'
-    );
-    console.log(`测试权限请求已发送: ${requestId}`);
-
-  }  else if (command === 'remove') {
+  }   else if (command === 'remove') {
     // 删除指定时间戳的消息（处理完一条删除一条）
     const [, timestampStr] = args;
     if (!timestampStr) {
@@ -354,125 +316,6 @@ async function main() {
       console.error(`  timestamp: ${msg.timestamp}`);
     }
   }
-}
-
-// --- Permission System (方案A': 基于定时任务架构) ---
-
-// 生成5位验证码（小写字母，不含l）
-function generateRequestId(): string {
-  const chars = 'abcdefghijkmnopqrstuvwxyz';  // 不含 l
-  let result = '';
-  for (let i = 0; i < 5; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
-
-// 加载待处理权限列表
-async function loadPermissions(): Promise<PermissionRequest[]> {
-  try {
-    const data = await readFile(PERMISSIONS_FILE, 'utf-8');
-    return JSON.parse(data).permissions || [];
-  } catch {
-    return [];
-  }
-}
-
-// 保存权限列表
-async function savePermissions(permissions: PermissionRequest[]) {
-  await writeFile(PERMISSIONS_FILE, JSON.stringify({
-    permissions,
-    updatedAt: new Date().toISOString()
-  }, null, 2));
-}
-
-// 发送权限请求到微信
-async function sendPermissionRequest(
-  chatId: string,
-  contextToken: string,
-  toolName: string,
-  description: string
-): Promise<string> {
-  const requestId = generateRequestId();
-
-  // 发送权限请求消息
-  const message =
-    `🔐 Claude 请求权限：${toolName}\n` +
-    `${description}\n\n` +
-    `回复 "yes ${requestId}" 批准\n` +
-    `回复 "no ${requestId}" 拒绝`;
-
-  await sendText({
-    to: chatId,
-    text: message,
-    baseUrl: account.baseUrl,
-    token: account.token,
-    contextToken
-  });
-
-  // 保存权限请求
-  const permissions = await loadPermissions();
-  permissions.push({
-    requestId,
-    chatId,
-    contextToken,
-    toolName,
-    description,
-    timestamp: Date.now(),
-    status: 'pending'
-  });
-  await savePermissions(permissions);
-
-  console.error(`[权限系统] 已发送权限请求 ${requestId} 到 ${chatId}`);
-  return requestId;
-}
-
-// 检查权限回复
-async function checkPermissionReplies(messages: Message[]): Promise<Set<number>> {
-  const permissions = await loadPermissions();
-  const PERMISSION_REPLY_RE = /^\s*(y|yes|n|no)\s+([a-km-z]{5})\s*$/i;
-  const processedTimestamps = new Set<number>();
-
-  for (const msg of messages) {
-    const match = PERMISSION_REPLY_RE.exec(msg.text);
-    if (!match) continue;
-
-    const [, action, requestId] = match;
-    const permission = permissions.find(p =>
-      p.requestId === requestId.toLowerCase() &&
-      p.status === 'pending'
-    );
-
-    if (!permission) {
-      console.error(`[权限系统] 未找到权限请求 ${requestId}`);
-      continue;
-    }
-
-    // 更新权限状态
-    permission.status = action.toLowerCase().startsWith('y') ? 'approved' : 'denied';
-    await savePermissions(permissions);
-
-    // 发送确认消息
-    const confirmText = action.toLowerCase().startsWith('y')
-      ? `✅ 已批准权限请求 ${requestId}`
-      : `❌ 已拒绝权限请求 ${requestId}`;
-
-    await replyToWeChat(msg.chatId, confirmText, msg.contextToken);
-    console.error(`[权限系统] 权限请求 ${requestId} 已${permission.status === 'approved' ? '批准' : '拒绝'}`);
-
-    // 标记该消息为已处理
-    processedTimestamps.add(msg.timestamp);
-  }
-
-  return processedTimestamps;
-}
-
-// 检查特定权限是否已批准
-async function isPermissionApproved(requestId: string): Promise<boolean | null> {
-  const permissions = await loadPermissions();
-  const permission = permissions.find(p => p.requestId === requestId);
-  if (!permission) return null;
-  return permission.status === 'approved';
 }
 
 main().catch(console.error);
