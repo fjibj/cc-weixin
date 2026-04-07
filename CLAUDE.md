@@ -1,188 +1,203 @@
-# Claude Code Configuration - RuFlo V3
+<!-- OMC:START -->
+<!-- OMC:VERSION:4.10.1 -->
 
-## Behavioral Rules (Always Enforced)
+# oh-my-claudecode - Intelligent Multi-Agent Orchestration
 
-- Do what has been asked; nothing more, nothing less
-- NEVER create files unless they're absolutely necessary for achieving your goal
-- ALWAYS prefer editing an existing file to creating a new one
-- NEVER proactively create documentation files (*.md) or README files unless explicitly requested
-- NEVER save working files, text/mds, or tests to the root folder
-- Never continuously check status after spawning a swarm — wait for results
-- ALWAYS read a file before editing it
-- NEVER commit secrets, credentials, or .env files
+You are running with oh-my-claudecode (OMC), a multi-agent orchestration layer for Claude Code.
+Coordinate specialized agents, tools, and skills so work is completed accurately and efficiently.
 
-## File Organization
+<operating_principles>
+- Delegate specialized work to the most appropriate agent.
+- Prefer evidence over assumptions: verify outcomes before final claims.
+- Choose the lightest-weight path that preserves quality.
+- Consult official docs before implementing with SDKs/frameworks/APIs.
+</operating_principles>
 
-- NEVER save to root folder — use the directories below
-- Use `/src` for source code files
-- Use `/tests` for test files
-- Use `/docs` for documentation and markdown files
-- Use `/config` for configuration files
-- Use `/scripts` for utility scripts
-- Use `/examples` for example code
+<delegation_rules>
+Delegate for: multi-file changes, refactors, debugging, reviews, planning, research, verification.
+Work directly for: trivial ops, small clarifications, single commands.
+Route code to `executor` (use `model=opus` for complex work). Uncertain SDK usage → `document-specialist` (repo docs first; Context Hub / `chub` when available, graceful web fallback otherwise).
+</delegation_rules>
 
-## Project Architecture
+<model_routing>
+`haiku` (quick lookups), `sonnet` (standard), `opus` (architecture, deep analysis).
+Direct writes OK for: `~/.claude/**`, `.omc/**`, `.claude/**`, `CLAUDE.md`, `AGENTS.md`.
+</model_routing>
 
-- Follow Domain-Driven Design with bounded contexts
-- Keep files under 500 lines
-- Use typed interfaces for all public APIs
-- Prefer TDD London School (mock-first) for new code
-- Use event sourcing for state changes
-- Ensure input validation at system boundaries
+<skills>
+Invoke via `/oh-my-claudecode:<name>`. Trigger patterns auto-detect keywords.
+Tier-0 workflows include `autopilot`, `ultrawork`, `ralph`, `team`, and `ralplan`.
+Keyword triggers: `"autopilot"→autopilot`, `"ralph"→ralph`, `"ulw"→ultrawork`, `"ccg"→ccg`, `"ralplan"→ralplan`, `"deep interview"→deep-interview`, `"deslop"`/`"anti-slop"`→ai-slop-cleaner, `"deep-analyze"`→analysis mode, `"tdd"`→TDD mode, `"deepsearch"`→codebase search, `"ultrathink"`→deep reasoning, `"cancelomc"`→cancel.
+Team orchestration is explicit via `/team`.
+Detailed agent catalog, tools, team pipeline, commit protocol, and full skills registry live in the native `omc-reference` skill when skills are available, including reference for `explore`, `planner`, `architect`, `executor`, `designer`, and `writer`; this file remains sufficient without skill support.
+</skills>
 
-### Project Config
+<verification>
+Verify before claiming completion. Size appropriately: small→haiku, standard→sonnet, large/security→opus.
+If verification fails, keep iterating.
+</verification>
 
-- **Topology**: hierarchical-mesh
-- **Max Agents**: 15
-- **Memory**: hybrid
-- **HNSW**: Enabled
-- **Neural**: Enabled
+<execution_protocols>
+Broad requests: explore first, then plan. 2+ independent tasks in parallel. `run_in_background` for builds/tests.
+Keep authoring and review as separate passes: writer pass creates or revises content, reviewer/verifier pass evaluates it later in a separate lane.
+Never self-approve in the same active context; use `code-reviewer` or `verifier` for the approval pass.
+Before concluding: zero pending tasks, tests passing, verifier evidence collected.
+</execution_protocols>
 
-## Build & Test
+<hooks_and_context>
+Hooks inject `<system-reminder>` tags. Key patterns: `hook success: Success` (proceed), `[MAGIC KEYWORD: ...]` (invoke skill), `The boulder never stops` (ralph/ultrawork active).
+Persistence: `<remember>` (7 days), `<remember priority>` (permanent).
+Kill switches: `DISABLE_OMC`, `OMC_SKIP_HOOKS` (comma-separated).
+</hooks_and_context>
 
-```bash
-# Build
-npm run build
+<cancellation>
+`/oh-my-claudecode:cancel` ends execution modes. Cancel when done+verified or blocked. Don't cancel if work incomplete.
+</cancellation>
 
-# Test
-npm test
+<worktree_paths>
+State: `.omc/state/`, `.omc/state/sessions/{sessionId}/`, `.omc/notepad.md`, `.omc/project-memory.json`, `.omc/plans/`, `.omc/research/`, `.omc/logs/`
+</worktree_paths>
 
-# Lint
-npm run lint
+## Setup
+
+Say "setup omc" or run `/oh-my-claudecode:omc-setup`.
+<!-- OMC:END -->
+
+---
+
+## 权限自动确认 (P0)
+
+**原则**: 微信消息处理时，自动确认权限请求，避免等待
+
+### 自动确认范围
+
+| 操作类型 | 策略 | 说明 |
+|----------|------|------|
+| 文件创建/编辑 | ✅ 自动确认 | 工作空间内文件 |
+| Bash 命令 | ✅ 自动确认 | 白名单内命令 |
+| 子 Agent 创建 | ✅ 自动确认 | 最多 3 个并行 |
+| 网络请求 | ✅ 自动确认 | API 调用、知识库上传 |
+| 外部工具 | ⚠️ 需确认 | 涉及敏感数据时 |
+| WeChat 频道文件 | ✅ 自动确认 | `~/.claude/channels/weixin/` 目录（last-check.json、pending.json 等） |
+
+### Bash 命令白名单
+
+```
+git (add|commit|status|diff|log|push|pull)
+npm (install|run|test|build|list)
+bun (run|test|build|install|x)
+node --eval
+curl
+mkdir|touch|cp|mv|rm|cat|echo
 ```
 
-- ALWAYS run tests after making code changes
-- ALWAYS verify build succeeds before committing
+### 例外情况（需人工确认）
 
-## Security Rules
+- 删除工作空间外文件
+- 修改系统配置
+- 访问敏感目录（~/.ssh, ~/.aws 等）
+- 执行 sudo/root 权限命令
 
-- NEVER hardcode API keys, secrets, or credentials in source files
-- NEVER commit .env files or any file containing secrets
-- Always validate user input at system boundaries
-- Always sanitize file paths to prevent directory traversal
-- Run `npx @claude-flow/cli@latest security scan` after security-related changes
+---
 
-## Concurrency: 1 MESSAGE = ALL RELATED OPERATIONS
+## 微信消息检测规范
 
-- All operations MUST be concurrent/parallel in a single message
-- Use Claude Code's Task tool for spawning agents, not just MCP
-- ALWAYS batch ALL todos in ONE TodoWrite call (5-10+ minimum)
-- ALWAYS spawn ALL agents in ONE message with full instructions via Task tool
-- ALWAYS batch ALL file reads/writes/edits in ONE message
-- ALWAYS batch ALL Bash commands in ONE message
+**原则**: 没有新消息时，不要更新 last-check.json 时间戳
 
-## Swarm Orchestration
+**Why:** 用户明确要求只在检测到新消息时才更新时间戳，避免不必要的文件写入操作。
 
-- MUST initialize the swarm using CLI tools when starting complex tasks
-- MUST spawn concurrent agents using Claude Code's Task tool
-- Never use CLI tools alone for execution — Task tool agents do the actual work
-- MUST call CLI tools AND Task tool in ONE message for complex work
+**How to apply:**
+1. 使用 `bun run auto-process.ts check` 检测消息
+2. 如果 `newMessages === 0`，直接返回，不执行任何写入操作
+3. 只有检测到新消息并处理完成后，才由处理流程自动更新时间戳
 
-### 3-Tier Model Routing (ADR-026)
+---
 
-| Tier | Handler | Latency | Cost | Use Cases |
-|------|---------|---------|------|-----------|
-| **1** | Agent Booster (WASM) | <1ms | $0 | Simple transforms (var→const, add types) — Skip LLM |
-| **2** | Haiku | ~500ms | $0.0002 | Simple tasks, low complexity (<30%) |
-| **3** | Sonnet/Opus | 2-5s | $0.003-0.015 | Complex reasoning, architecture, security (>30%) |
+## 微信消息回复格式规则
 
-- Always check for `[AGENT_BOOSTER_AVAILABLE]` or `[TASK_MODEL_RECOMMENDATION]` before spawning agents
-- Use Edit tool directly when `[AGENT_BOOSTER_AVAILABLE]`
+**原则**: 多行文本必须使用 reply-file 方式发送
 
-## Swarm Configuration & Anti-Drift
+**Why:** 用户明确要求多行内容要用 reply-file 方式回复，直接 reply 会导致格式问题。
 
-- ALWAYS use hierarchical topology for coding swarms
-- Keep maxAgents at 6-8 for tight coordination
-- Use specialized strategy for clear role boundaries
-- Use `raft` consensus for hive-mind (leader maintains authoritative state)
-- Run frequent checkpoints via `post-task` hooks
-- Keep shared memory namespace for all agents
+**How to apply:**
+1. 如果回复内容包含 `\n` 换行符，或超过 100 个字符，或包含列表/代码块
+2. 先写入临时文件（如 `D:/claudecode/MyAICodes/just-for-weixin/tmp/msg.md`）
+3. 使用 `bun run auto-process.ts reply-file <chatId> <filePath> [contextToken]`
+4. 发送后删除临时文件
 
+**示例:**
 ```bash
-npx @claude-flow/cli@latest swarm init --topology hierarchical --max-agents 8 --strategy specialized
+# 多行内容写入文件
+echo "第一行\n第二行\n第三行" > /tmp/msg.txt
+
+# 使用 reply-file 发送
+bun run auto-process.ts reply-file "chatId" "/tmp/msg.txt" "contextToken"
 ```
 
-## Swarm Execution Rules
-
-- ALWAYS use `run_in_background: true` for all agent Task calls
-- ALWAYS put ALL agent Task calls in ONE message for parallel execution
-- After spawning, STOP — do NOT add more tool calls or check status
-- Never poll TaskOutput or check swarm status — trust agents to return
-- When agent results arrive, review ALL results before proceeding
-
-## V3 CLI Commands
-
-### Core Commands
-
-| Command | Subcommands | Description |
-|---------|-------------|-------------|
-| `init` | 4 | Project initialization |
-| `agent` | 8 | Agent lifecycle management |
-| `swarm` | 6 | Multi-agent swarm coordination |
-| `memory` | 11 | AgentDB memory with HNSW search |
-| `task` | 6 | Task creation and lifecycle |
-| `session` | 7 | Session state management |
-| `hooks` | 17 | Self-learning hooks + 12 workers |
-| `hive-mind` | 6 | Byzantine fault-tolerant consensus |
-
-### Quick CLI Examples
-
+**单条消息（单行，短文本）可用 reply:**
 ```bash
-npx @claude-flow/cli@latest init --wizard
-npx @claude-flow/cli@latest agent spawn -t coder --name my-coder
-npx @claude-flow/cli@latest swarm init --v3-mode
-npx @claude-flow/cli@latest memory search --query "authentication patterns"
-npx @claude-flow/cli@latest doctor --fix
+bun run auto-process.ts reply "chatId" "简短回复" "contextToken"
 ```
 
-## Available Agents (60+ Types)
+---
 
-### Core Development
-`coder`, `reviewer`, `tester`, `planner`, `researcher`
+## 自动记忆强制规则 (P0)
 
-### Specialized
-`security-architect`, `security-auditor`, `memory-specialist`, `performance-engineer`
+**原则**: 所有微信消息的处理记录必须追加到 `D:\claudecode\MyAICodes\just-for-weixin\memory\weixin-history.md`，无一例外。
 
-### Swarm Coordination
-`hierarchical-coordinator`, `mesh-coordinator`, `adaptive-coordinator`
+**Why:** 用户明确要求所有消息处理都要记录下来，作为历史记录和知识沉淀。
 
-### GitHub & Repository
-`pr-manager`, `code-review-swarm`, `issue-tracker`, `release-manager`
+**How to apply:**
+1. 每次微信消息处理完成后（发送回复后），立即追加记录到 weixin-history.md
+2. 记录格式：
+   ```markdown
+   ### 消息 X: [简短主题]
+   **消息**: [用户消息摘要，前 100 字]
+   **处理**: [处理流程简述]
+   **结果**: [处理结果摘要，前 200 字]
+   **标签**: #[关键词 1] #[关键词 2] #[关键词 3]
+   ```
+3. 按日期分组，新日期创建新章节
+4. 处理完成和记录追加是两个独立步骤，都要执行
 
-### SPARC Methodology
-`sparc-coord`, `sparc-coder`, `specification`, `pseudocode`, `architecture`
+**违规处理**: 如果发现忘记记录，立即补充追加。
 
-## Memory Commands Reference
+---
 
-```bash
-# Store (REQUIRED: --key, --value; OPTIONAL: --namespace, --ttl, --tags)
-npx @claude-flow/cli@latest memory store --key "pattern-auth" --value "JWT with refresh" --namespace patterns
+## 文档存放规则
 
-# Search (REQUIRED: --query; OPTIONAL: --namespace, --limit, --threshold)
-npx @claude-flow/cli@latest memory search --query "authentication patterns"
+**规则**: 所有生成的文档（DOCX、PDF、Markdown 等）必须存放到 `D:\claudecode\MyAICodes\just-for-weixin\` 目录下。
 
-# List (OPTIONAL: --namespace, --limit)
-npx @claude-flow/cli@latest memory list --namespace patterns --limit 10
+**Why**: 用户明确要求统一文档存放位置，便于查找和管理，同时避免占用 C 盘空间。
 
-# Retrieve (REQUIRED: --key; OPTIONAL: --namespace)
-npx @claude-flow/cli@latest memory retrieve --key "pattern-auth" --namespace patterns
-```
+**How to apply:**
+1. 使用 docx 技能生成文档时，输出路径指定为 `D:/claudecode/MyAICodes/just-for-weixin/`
+2. 临时文件也使用此目录下的 `/tmp` 子目录
+3. IMA 知识库上传的文档除外（云端存储）
 
-## Quick Setup
+---
 
-```bash
-claude mcp add claude-flow -- npx -y @claude-flow/cli@latest
-npx @claude-flow/cli@latest daemon start
-npx @claude-flow/cli@latest doctor --fix
-```
+## Harness 流程处理准则
 
-## Claude Code vs CLI Tools
+**原则**: 所有微信消息必须通过 Harness 流程处理：Plan → Work → Review → Reply
 
-- Claude Code's Task tool handles ALL execution: agents, file ops, code generation, git
-- CLI tools handle coordination via Bash: swarm init, memory, hooks, routing
-- NEVER use CLI tools as a substitute for Task tool agents
+**最高优先级**: 每一步结果都必须返回给微信
 
-## Support
+**How to apply:**
+1. Plan 阶段：发送计划概要
+2. Work 阶段：每步执行结果都要发送（格式：`【Phase 2: Work - Step X/Y】...`）
+3. Review 阶段：发送审查维度和结论
+4. Reply 阶段：发送最终处理总结
 
-- Documentation: https://github.com/ruvnet/claude-flow
-- Issues: https://github.com/ruvnet/claude-flow/issues
+---
+
+## 文件存储位置规则
+
+**规则**: 所有文件都写到 `D:\claudecode\MyAICodes\just-for-weixin\` 主目录，避免使用 C 盘。
+
+**Why:** 用户明确要求避免占用 C 盘空间，便于统一管理和清理。
+
+**How to apply:**
+1. 临时文件使用 `D:/claudecode/MyAICodes/just-for-weixin/tmp/`
+2. 生成的文档使用主目录
+3. 记忆文件使用 `D:/claudecode/MyAICodes/just-for-weixin/memory/`
