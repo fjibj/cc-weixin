@@ -28,6 +28,47 @@
 
 ## 最新改进 (v0.2.4)
 
+### 2026-04-13 更新：MCP 服务器保活机制优化
+
+#### 问题描述
+- **现象**: 每次执行 `auto-process.ts` 都显示检测到 2 个 server.ts 进程，导致反复终止和重启
+- **影响**: 产生大量临时进程，server.ts 服务不稳定
+
+#### 根因分析
+- 原检测逻辑使用 `wmic process where "CommandLine LIKE '%server.ts%'"` 检测进程
+- 由于 `auto-process.ts` 自身也是通过 `bun` 运行，命令行包含 `bun run auto-process.ts`，被误判为 server.ts 进程
+- 导致检测逻辑始终认为有多个进程，触发清理和重启
+
+#### 解决方案
+1. **新增 `getServerProcessCount()` 函数**：精确检测 server.ts 进程数量
+   - 检测条件：`name='bun.exe'` AND `CommandLine LIKE '%server.ts%'`
+   - 排除 `auto-process.ts` 自身（避免误判）
+
+2. **重构 `ensureMcpServer()` 函数**：确保有且只有一个 server.ts 进程
+   - **0 个进程**：启动新的 server.ts
+   - **1 个进程**：不执行任何操作（正常状态）
+   - **多个进程**：保留最后一个，终止其他所有
+
+3. **补充 `startMcpServer()` 函数**：后台启动 server.ts
+   - 使用 `spawn('bun', ['server.ts'])` 直接启动
+   - `stdio: 'ignore'` + `windowsHide: true` 确保完全后台运行
+
+#### WMIC 检测命令
+```bash
+wmic process where "name='bun.exe' and CommandLine LIKE '%server.ts%'" get ProcessId,CommandLine
+```
+
+#### 效果
+- ✅ 修复进程检测误判问题
+- ✅ 确保只有 1 个 server.ts 进程运行
+- ✅ 减少不必要的进程重启
+- ✅ 添加详细日志，便于调试
+
+#### 相关文件
+- `auto-process.ts`：重构保活逻辑
+
+---
+
 ### 2026-04-05 更新
 
 #### 1. 权限自动确认机制 (P0)

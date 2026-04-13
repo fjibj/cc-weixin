@@ -141,6 +141,45 @@ bun run auto-process.ts reply "chatId" "简短回复" "contextToken"
 
 ---
 
+## MCP 服务器保活机制
+
+**原则**: 确保有且只有一个 server.ts 进程运行
+
+**Why:** server.ts 是 MCP 服务器，负责轮询微信消息。`auto-process.ts` 包含保活逻辑，会在 server.ts 未运行时自动启动它，并在有多个进程时自动清理。
+
+**How to apply:**
+1. `auto-process.ts` 的 `ensureMcpServer()` 函数会在以下场景被调用：
+   - 默认命令（无参数）：处理新消息前
+   - `check` 命令：不需要确保服务器运行
+   - `send-text`、`send-text-file`、`send-file` 等命令：发送消息前
+   - `reply`、`reply-file` 命令：发送回复前
+
+2. 保活逻辑：
+   - **0 个进程**：启动一个新的 server.ts 后台进程
+   - **1 个进程**：不执行任何操作（正常状态）
+   - **多个进程**：保留最后一个，终止其他所有
+
+3. 检测逻辑：
+   - 使用 `wmic process where "name='bun.exe' and CommandLine LIKE '%server.ts%'"` 检测进程
+   - 排除 `auto-process.ts` 自身（避免误判）
+
+**示例输出:**
+```bash
+# 场景 1：没有进程
+[MCP] 服务器未运行，正在启动...
+[MCP] 服务器已启动
+
+# 场景 2：多个进程
+[MCP] 检测到 2 个 server.ts 进程，保留最后一个 (PID: 12345)，终止其他进程...
+[MCP] 已终止进程 67890
+[MCP] 多进程清理完成
+
+# 场景 3：正常（1 个进程）
+（无输出，静默处理）
+```
+
+---
+
 ## 自动记忆强制规则 (P0)
 
 **原则**: 所有微信消息的处理记录必须追加到 `D:\claudecode\MyAICodes\just-for-weixin\memory\weixin-history.md`，无一例外。
