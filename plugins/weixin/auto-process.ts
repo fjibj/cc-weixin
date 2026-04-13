@@ -26,26 +26,25 @@ interface Message {
   attachmentType?: string;
 }
 
-// 检查 MCP 服务器是否运行
-async function isMcpServerRunning(): Promise<boolean> {
+// 获取 server.ts 进程数量
+async function getServerProcessCount(): Promise<{ count: number; pids: number[] }> {
   try {
-    const isWindows = platform() === 'win32';
-    // Windows: 使用 tasklist 检查 bun.exe 进程
-    const checkCmd = isWindows
-      ? 'tasklist /FI "IMAGENAME eq bun.exe" /FO CSV'
-      : 'ps aux | grep "bun.*server.ts" | grep -v grep';
+    const { execSync } = require('child_process');
+    // 检测条件：1) 进程名是 bun.exe 2) 命令行包含 server.ts
+    const output = execSync('wmic process where "name=\'bun.exe\' and CommandLine LIKE \'%server.ts%\'" get ProcessId', { encoding: 'utf-8' });
 
-    const result = await new Promise<string>((resolve) => {
-      const child = spawn(checkCmd, { shell: true });
-      let output = '';
-      child.stdout.on('data', (data) => output += data.toString());
-      child.on('close', () => resolve(output));
-    });
+    // 解析进程 ID（输出格式为多行，第一行是标题）
+    const lines = output.trim().split('\n').slice(1); // 跳过标题行
+    const pids = lines
+      .map((line: string) => {
+        const match = line.match(/(\d+)/);
+        return match ? parseInt(match[1]) : 0;
+      })
+      .filter((pid: number) => pid > 0);
 
-    // 检查结果中是否包含 bun.exe 且没有 "No tasks" 或 "信息"
-    return result.includes('bun.exe') && !result.includes('No tasks') && !result.includes('信息');
+    return { count: pids.length, pids };
   } catch {
-    return false;
+    return { count: 0, pids: [] };
   }
 }
 
@@ -53,19 +52,14 @@ async function isMcpServerRunning(): Promise<boolean> {
 async function startMcpServer(): Promise<void> {
   console.log('[MCP] 服务器未运行，正在启动...');
 
-  const isWindows = platform() === 'win32';
   const cwd = 'C:\\Users\\Administrator\\.claude\\plugins\\cache\\cc-weixin\\weixin\\0.1.0';
 
-  // 使用 nohup 或 start 命令让进程在后台持续运行
-  const command = isWindows
-    ? `start /B bun server.ts > "${MCP_LOG_FILE}" 2>&1`
-    : `nohup bun server.ts > "${MCP_LOG_FILE}" 2>&1 &`;
-
-  spawn(command, {
-    shell: true,
+  // 直接启动 bun 进程，后台运行，不弹出 CMD 窗口
+  const child = spawn('bun', ['server.ts'], {
     cwd,
     detached: true,
-    windowsHide: false
+    stdio: 'ignore',
+    windowsHide: true
   });
 
   // 等待 3 秒让服务器启动
@@ -73,12 +67,38 @@ async function startMcpServer(): Promise<void> {
   console.log('[MCP] 服务器已启动');
 }
 
-// 确保 MCP 服务器运行
+// 检查 MCP 服务器是否运行（检测是否有且只有一个 server.ts 进程）
+async function isMcpServerRunning(): Promise<boolean> {
+  const { count } = await getServerProcessCount();
+  return count === 1;
+}
+
+// 确保有且只有一个 MCP 服务器进程
 export async function ensureMcpServer(): Promise<void> {
-  const running = await isMcpServerRunning();
-  if (!running) {
+  const { count, pids } = await getServerProcessCount();
+
+  if (count === 0) {
+    // 没有进程，启动一个新的
     await startMcpServer();
+  } else if (count > 1) {
+    // 有多个进程，保留最后一个，终止其他所有
+    console.error(`[MCP] 检测到 ${count} 个 server.ts 进程，保留最后一个 (PID: ${pids[pids.length - 1]})，终止其他进程...`);
+
+    const { execSync } = require('child_process');
+    for (let i = 0; i < pids.length - 1; i++) {
+      try {
+        execSync(`wmic process where "ProcessId=${pids[i]}" call terminate`, { encoding: 'utf-8' });
+        console.error(`[MCP] 已终止进程 ${pids[i]}`);
+      } catch (err: any) {
+        console.error(`[MCP] 终止进程 ${pids[i]} 失败:`, err.message);
+      }
+    }
+
+    // 等待 1 秒确保清理完成
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    console.error('[MCP] 多进程清理完成');
   }
+  // count === 1 时无需操作
 }
 
 async function getLastCheckTime(): Promise<number> {
@@ -151,11 +171,8 @@ async function processNewMessages() {
     const newMessages = messages.filter(m => m.timestamp > lastCheckTime);
 
     if (newMessages.length === 0) {
-      console.log('[]'); // 输出空数组表示没有新消息
-      // 使用队列中最大时间戳更新，避免重复检查
-      const maxTimestamp = Math.max(...messages.map(m => m.timestamp), lastCheckTime);
-      await saveLastCheckTime(maxTimestamp);
-      return;
+      // 没有新消息，静默退出（不输出任何内容，避免 Claude-Mem 捕获）
+      process.exit(0);
     }
 
     // 按时间戳排序（从早到晚）
@@ -204,15 +221,18 @@ async function main() {
   const command = args[0];
 
   if (command === 'check') {
-    // 确保 MCP 服务器运行
-    await ensureMcpServer();
-
-    // 只检查，不处理
+    // 只检查，不处理（不需要确保 MCP 服务器运行）
     const data = await readFile(QUEUE_FILE, 'utf-8');
     const messages: Message[] = JSON.parse(data);
     const lastCheckTime = await getLastCheckTime();
     const newMessages = messages.filter(m => m.timestamp > lastCheckTime);
 
+    // 如果没有新消息，静默退出（不输出任何内容）
+    if (newMessages.length === 0) {
+      process.exit(0);
+    }
+
+    // 有新消息时输出详情
     console.log(JSON.stringify({
       lastTimestamp: lastCheckTime,
       totalMessages: messages.length,
@@ -225,8 +245,61 @@ async function main() {
     await saveLastCheckTime(0);
     console.log('时间戳已重置为 0');
 
+  } else if (command === 'send-text') {
+    // 发送单行文本
+    await ensureMcpServer();
+    const [, to, text, contextToken = ''] = args;
+    if (!to || !text) {
+      console.error('用法: bun run auto-process.ts send-text <chatId> <text> [contextToken]');
+      process.exit(1);
+    }
+    await replyToWeChat(to, text, contextToken);
+    console.log('文本已发送');
+
+  } else if (command === 'send-text-file') {
+    // 从文件发送多行文本
+    await ensureMcpServer();
+    const [, to, filePath, contextToken = ''] = args;
+    if (!to || !filePath) {
+      console.error('用法: bun run auto-process.ts send-text-file <chatId> <filePath> [contextToken]');
+      process.exit(1);
+    }
+    const text = await readFile(filePath, 'utf-8');
+    await replyToWeChat(to, text, contextToken);
+    console.log('文本已发送');
+
+  } else if (command === 'send-file' || command === 'send-image' || command === 'send-video') {
+    // 发送文件/图片/视频
+    await ensureMcpServer();
+    const [, to, filePath, contextToken = ''] = args;
+    if (!to || !filePath) {
+      console.error(`用法: bun run auto-process.ts ${command} <chatId> <filePath> [contextToken]`);
+      process.exit(1);
+    }
+
+    // 读取账号信息
+    const { loadAccount } = await import('./src/accounts.js');
+    const { sendMediaFile } = await import('./src/send.js');
+    const { CDN_BASE_URL } = await import('./src/accounts.js');
+    const account = loadAccount();
+    if (!account) {
+      console.error('未找到账号信息');
+      process.exit(1);
+    }
+
+    await sendMediaFile({
+      filePath,
+      to,
+      text: '',
+      baseUrl: account.baseUrl,
+      token: account.token,
+      contextToken,
+      cdnBaseUrl: CDN_BASE_URL
+    });
+    console.log('文件已发送');
+
   } else if (command === 'reply') {
-    // 发送回复
+    // 发送回复（保留旧命令兼容）
     // 确保 MCP 服务器运行
     await ensureMcpServer();
     const [, to, text, contextToken = ''] = args;
@@ -324,7 +397,7 @@ async function main() {
     console.log(JSON.stringify(pendingMessages, null, 2));
     console.log('=== WECHAT_MESSAGES_END ===');
     console.error(`[auto-process] 发现 ${pendingMessages.length} 条新消息，请在当前会话中使用 Harness 流程处理`);
-    console.error('处理步骤：');
+    console.error('处理步骤如下：');
     console.error('1. /harness-plan - 创建处理计划，并回复');
     console.error('2. /harness-work - 执行计划，并回复');
     console.error('3. /harness-review - 审查结果，并回复');
